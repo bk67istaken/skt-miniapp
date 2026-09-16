@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SKT Girişi</title>
+<title>SKT Takip</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -17,13 +17,19 @@
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
-    margin: 0; padding: 14px 14px 28px;
+    margin: 0; padding: 12px 14px 28px;
     font: 16px/1.45 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
     background: var(--zemin); color: var(--yazi);
   }
-  h1 { font-size: 19px; font-weight: 600; margin: 2px 0 14px; }
+  .sekmeler { display: flex; gap: 6px; margin-bottom: 16px; }
+  .sekme {
+    flex: 1; padding: 11px 4px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    background: var(--kart); color: var(--soluk); border: 1px solid var(--cizgi);
+    text-align: center; cursor: pointer;
+  }
+  .sekme.secili { background: var(--vurgu); color: var(--vurgu-yazi); border-color: transparent; }
   label { display: block; font-size: 13px; color: var(--soluk); margin: 0 0 6px; }
-  .alan { margin-bottom: 16px; }
+  .alan { margin-bottom: 14px; }
   input {
     width: 100%; padding: 13px 14px; font-size: 17px; color: var(--yazi);
     background: var(--kart); border: 1px solid var(--cizgi); border-radius: 12px;
@@ -34,7 +40,6 @@
     width: 100%; padding: 15px; border-radius: 12px; font-size: 17px; font-weight: 600;
     background: var(--vurgu); color: var(--vurgu-yazi);
   }
-  .btn[disabled] { opacity: .45; }
   .btn-ikincil { background: var(--kart); color: var(--yazi); border: 1px solid var(--cizgi); }
   .cipler { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .cip {
@@ -42,12 +47,9 @@
     border: 1px solid var(--cizgi); color: var(--yazi); font-size: 15px;
   }
   .cip.secili { background: var(--vurgu); color: var(--vurgu-yazi); border-color: transparent; }
-  #kamera { display: none; margin-bottom: 16px; }
+  #kamera { display: none; margin-bottom: 14px; }
   #kamera.acik { display: block; }
-  .video-kutu {
-    position: relative; border-radius: 14px; overflow: hidden; background: #000;
-    aspect-ratio: 4 / 3;
-  }
+  .video-kutu { position: relative; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
   video { width: 100%; height: 100%; object-fit: cover; display: block; }
   .nisan {
     position: absolute; left: 8%; right: 8%; top: 32%; height: 36%;
@@ -55,23 +57,27 @@
     box-shadow: 0 0 0 2000px rgba(0,0,0,.35);
   }
   .durum { font-size: 14px; color: var(--soluk); margin-top: 8px; text-align: center; }
-  .uyari {
-    background: color-mix(in srgb, #e24b4a 12%, transparent); color: #a32d2d;
-    padding: 11px 13px; border-radius: 10px; font-size: 14px; margin-bottom: 14px;
-  }
-  .gecmis { margin-top: 26px; border-top: 1px solid var(--cizgi); padding-top: 14px; }
-  .gecmis h2 { font-size: 14px; color: var(--soluk); font-weight: 500; margin: 0 0 10px; }
-  .kayit { font-size: 14px; padding: 9px 0; border-bottom: 1px solid var(--cizgi); }
-  .kayit b { font-variant-numeric: tabular-nums; }
-  .gizli { display: none; }
+  .uyari { background: color-mix(in srgb, #e24b4a 12%, transparent); color: #a32d2d;
+           padding: 11px 13px; border-radius: 10px; font-size: 14px; margin-bottom: 12px; }
+  .bilgi { font-size: 13px; color: var(--soluk); margin: -6px 0 14px; }
+  .gecmis { margin-top: 24px; border-top: 1px solid var(--cizgi); padding-top: 12px; }
+  .gecmis h2 { font-size: 13px; color: var(--soluk); font-weight: 500; margin: 0 0 8px; }
+  .kayit { font-size: 14px; padding: 8px 0; border-bottom: 1px solid var(--cizgi); }
+  .gizli { display: none !important; }
 </style>
 </head>
 <body>
-<h1>SKT girişi</h1>
+
+<div class="sekmeler">
+  <div class="sekme" data-sekme="sayim">Sayım</div>
+  <div class="sekme" data-sekme="urun_ekle">Ürün ekle</div>
+  <div class="sekme secili" data-sekme="skt_ekle">SKT ekle</div>
+  <div class="sekme" data-sekme="skt_sil">SKT sil</div>
+</div>
 
 <div id="uyari" class="uyari gizli"></div>
 
-<button id="tara" class="btn btn-ikincil" style="margin-bottom:16px">📷 Barkodu kameraya okut</button>
+<button id="tara" class="btn btn-ikincil" style="margin-bottom:14px">📷 Barkodu kameraya okut</button>
 
 <div id="kamera">
   <div class="video-kutu">
@@ -88,15 +94,23 @@
 </div>
 
 <div class="alan">
+  <label for="fiyat">Fiyat</label>
+  <input id="fiyat" inputmode="decimal" autocomplete="off" placeholder="10,00">
+  <div class="bilgi gizli" id="fiyatBilgi">Etiket QR'ından okundu, yanlışsa düzelt.</div>
+</div>
+
+<div class="alan gizli" id="alanSkt">
   <label for="skt">Son kullanma tarihi</label>
   <input id="skt" type="date">
 </div>
 
-<div class="alan">
-  <label for="adet">Adet</label>
+<div class="alan gizli" id="alanAdet">
+  <label for="adet" id="adetEtiket">Adet</label>
   <input id="adet" type="number" min="1" step="1" value="1" inputmode="numeric">
   <div class="cipler" id="adetCipleri"></div>
 </div>
+
+<div class="bilgi gizli" id="sekmeNotu"></div>
 
 <button id="gonder" class="btn">Kaydet</button>
 
@@ -109,16 +123,44 @@
 <script>
 const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
-
+const BOT = "SKT67bot";
 const $ = (id) => document.getElementById(id);
+
+/* --- sekmeler --- */
+const SEKMELER = {
+  sayim:     { buton: "Sayımı gönder",    skt: false, adet: true,  adetEtiket: "Rafta sayılan adet",
+               not: "Rafta gerçekte kaç adet varsa onu yaz; bot kaydı buna eşitler." },
+  urun_ekle: { buton: "Ürünü tanımla",    skt: false, adet: false,
+               not: "Ürün adını ve SKT'den kaç gün önce kalkacağını bot sohbette soracak." },
+  skt_ekle:  { buton: "Kaydet",           skt: true,  adet: true,  adetEtiket: "Adet",
+               not: "" },
+  skt_sil:   { buton: "Kayıtları getir",  skt: false, adet: false,
+               not: "Bu ürünün kayıtları sohbete gelir, silmek istediğinin butonuna basarsın." },
+};
+let aktifSekme = "skt_ekle";
+
+function sekmeSec(ad) {
+  aktifSekme = ad;
+  const s = SEKMELER[ad];
+  document.querySelectorAll(".sekme").forEach((d) =>
+    d.classList.toggle("secili", d.dataset.sekme === ad));
+  $("alanSkt").classList.toggle("gizli", !s.skt);
+  $("alanAdet").classList.toggle("gizli", !s.adet);
+  if (s.adet) $("adetEtiket").textContent = s.adetEtiket;
+  $("gonder").textContent = s.buton;
+  $("sekmeNotu").textContent = s.not;
+  $("sekmeNotu").classList.toggle("gizli", !s.not);
+  uyar("");
+}
+document.querySelectorAll(".sekme").forEach((d) =>
+  d.onclick = () => sekmeSec(d.dataset.sekme));
+
 const uyariKutu = $("uyari");
 function uyar(metin) {
   uyariKutu.textContent = metin;
   uyariKutu.classList.toggle("gizli", !metin);
 }
-function titret(tur) {
-  try { tg && tg.HapticFeedback.notificationOccurred(tur); } catch (e) {}
-}
+function titret(tur) { try { tg && tg.HapticFeedback.notificationOccurred(tur); } catch (e) {} }
 
 /* --- adet cipleri --- */
 [1, 2, 3, 4, 5, 6, 8, 10, 12, 24].forEach((s) => {
@@ -129,13 +171,14 @@ function titret(tur) {
   $("adetCipleri").appendChild(b);
 });
 function isaretle(deger) {
-  [...document.querySelectorAll(".cip")].forEach((c) =>
+  document.querySelectorAll(".cip").forEach((c) =>
     c.classList.toggle("secili", Number(c.textContent) === Number(deger)));
 }
 $("adet").addEventListener("input", () => isaretle($("adet").value));
 isaretle(1);
+sekmeSec("skt_ekle");
 
-/* --- kamera ile barkod okuma --- */
+/* --- kamera --- */
 let akis = null, zxingOkuyucu = null, tarama = null;
 
 async function kamerayiAc() {
@@ -148,7 +191,7 @@ async function kamerayiAc() {
     });
   } catch (e) {
     kamerayiKapat();
-    uyar("Kamera açılamadı. Telegram'a kamera izni ver ya da kodu elle yaz.");
+    uyar("Kamera açılamadı. İzin ver ya da kodu elle yaz.");
     return;
   }
   const video = $("video");
@@ -159,7 +202,6 @@ async function kamerayiAc() {
     const dedektor = new BarcodeDetector({
       formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code", "itf"]
     });
-    $("kameraDurum").textContent = "Barkodu çerçevenin içine al";
     tarama = setInterval(async () => {
       try {
         const bulunan = await dedektor.detect(video);
@@ -167,11 +209,8 @@ async function kamerayiAc() {
       } catch (e) {}
     }, 250);
   } else if (window.ZXing) {
-    $("kameraDurum").textContent = "Okunuyor…";
     zxingOkuyucu = new ZXing.BrowserMultiFormatReader();
-    zxingOkuyucu.decodeFromVideoElement(video, (sonuc) => {
-      if (sonuc) okundu(sonuc.getText());
-    });
+    zxingOkuyucu.decodeFromVideoElement(video, (sonuc) => { if (sonuc) okundu(sonuc.getText()); });
   } else {
     kamerayiKapat();
     uyar("Bu cihazda kamerayla okuma desteklenmiyor, kodu elle yaz.");
@@ -188,73 +227,86 @@ function kamerayiKapat() {
 }
 
 /* Raf etiketi QR'i "urun kodu - fiyat" tasir: 1713865-10,00 */
-function kodAyikla(ham) {
-  const e = String(ham).trim().match(/^(\d{4,14})\s*[-_/]\s*\d{1,6}[.,]\d{2}$/);
-  return e ? e[1] : String(ham).trim();
+function etiketCoz(ham) {
+  const e = String(ham).trim().match(/^(\d{4,14})\s*[-_/]\s*(\d{1,6}[.,]\d{2})$/);
+  return e ? { kod: e[1], fiyat: e[2] } : { kod: String(ham).trim(), fiyat: null };
 }
 
 function okundu(ham) {
-  const kod = kodAyikla(ham);
+  const { kod, fiyat } = etiketCoz(ham);
   $("kod").value = kod;
   $("kameraDurum").textContent = "Okundu: " + kod;
+  if (fiyat) {
+    $("fiyat").value = fiyat;
+    $("fiyatBilgi").classList.remove("gizli");
+  }
   titret("success");
   kamerayiKapat();
-  if (!$("skt").value) $("skt").focus();
 }
 
 $("tara").onclick = kamerayiAc;
 $("kameraKapat").onclick = kamerayiKapat;
 
 /* --- gonderme ---
-   Telegram, uygulamadan bota dogrudan veri gondermeye (sendData) yalnizca
-   klavye butonundan acilan uygulamalarda izin veriyor. Tarayicidan ya da mesaj
-   icindeki butondan acilinca t.me baglantisiyla gonderiyoruz; ikisi de bota
-   ayni kaydi ulastirir. */
-const BOT = "SKT67bot";
-
+   Telegram sendData'ya yalnizca klavye butonundan acilan uygulamada izin verir.
+   Tarayicidan ya da mesaj butonundan acilinca t.me baglantisi kullanilir. */
 function b64url(metin) {
   return btoa(unescape(encodeURIComponent(metin)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+function paketle(islem, kod, skt, adet, fiyat) {
+  const harf = { skt_ekle: "e", sayim: "s", urun_ekle: "u", skt_sil: "d" }[islem];
+  const alanlar = islem === "skt_ekle" ? [skt, adet]
+                : islem === "sayim" ? [adet, ""]
+                : ["", ""];
+  return harf + "|" + kod + "|" + alanlar[0] + "|" + alanlar[1] + "|" + (fiyat || "");
+}
+
 $("gonder").onclick = () => {
+  const s = SEKMELER[aktifSekme];
   const kod = $("kod").value.trim();
+  const fiyat = $("fiyat").value.trim();
   const skt = $("skt").value;
   const adet = parseInt($("adet").value, 10);
 
   if (!kod) { uyar("Ürün kodu boş. Kameraya okut ya da elle yaz."); return; }
-  if (!skt) { uyar("Son kullanma tarihini seç."); return; }
-  if (!adet || adet < 1) { uyar("Adet en az 1 olmalı."); return; }
+  if (s.skt && !skt) { uyar("Son kullanma tarihini seç."); return; }
+  if (s.adet && (!adet || adet < 1)) { uyar("Adet en az 1 olmalı."); return; }
   uyar("");
 
-  const derin = "https://t.me/" + BOT + "?start=" + b64url(kod + "|" + skt + "|" + adet);
-  gecmiseEkle(kod, skt, adet, derin);
+  const derin = "https://t.me/" + BOT + "?start=" +
+                b64url(paketle(aktifSekme, kod, skt, adet, fiyat));
+  gecmiseEkle(kod, derin);
   titret("success");
 
   if (tg && tg.sendData) {
-    try { tg.sendData(JSON.stringify({ islem: "kayit", kod: kod, skt: skt, adet: adet })); }
-    catch (e) {}
+    try {
+      tg.sendData(JSON.stringify({
+        islem: aktifSekme, kod: kod, skt: skt || null,
+        adet: s.adet ? adet : 1, fiyat: fiyat || null
+      }));
+    } catch (e) {}
   }
-
-  // sendData calistiysa Telegram pencereyi hemen kapatir; hala buradaysak yedek yol
   setTimeout(() => {
     if (document.visibilityState !== "visible") return;
     if (tg && tg.openTelegramLink) tg.openTelegramLink(derin);
     else window.location.href = derin;
   }, 800);
 
-  $("kod").value = "";           // sonraki urun icin hazir (tarih ayni kalir)
+  $("kod").value = "";
+  $("fiyat").value = "";
+  $("fiyatBilgi").classList.add("gizli");
   $("adet").value = 1;
   isaretle(1);
 };
 
-function gecmiseEkle(kod, skt, adet, derin) {
+function gecmiseEkle(kod, derin) {
   const kutu = $("gecmisListe");
   const satir = document.createElement("div");
-  const gun = skt.split("-").reverse().join(".");
   satir.className = "kayit";
-  satir.innerHTML = "<b>" + kod + "</b> · SKT " + gun + " · " + adet + " ad" +
-    ' <a href="' + derin + '" style="color:var(--vurgu)">Telegram\'a gönder</a>';
+  satir.innerHTML = "<b>" + kod + "</b> · " + SEKMELER[aktifSekme].buton +
+    ' <a href="' + derin + '" style="color:var(--vurgu)">→ Telegram</a>';
   kutu.prepend(satir);
   $("gecmis").classList.remove("gizli");
 }
