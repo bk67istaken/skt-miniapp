@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SKT Girişi</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --zemin: var(--tg-theme-bg-color, #ffffff);
+    --kart: var(--tg-theme-secondary-bg-color, #f4f4f2);
+    --yazi: var(--tg-theme-text-color, #1f1f1d);
+    --soluk: var(--tg-theme-hint-color, #78786f);
+    --vurgu: var(--tg-theme-button-color, #2f6fd0);
+    --vurgu-yazi: var(--tg-theme-button-text-color, #ffffff);
+    --cizgi: color-mix(in srgb, var(--soluk) 30%, transparent);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 14px 14px 28px;
+    font: 16px/1.45 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+    background: var(--zemin); color: var(--yazi);
+  }
+  h1 { font-size: 19px; font-weight: 600; margin: 2px 0 14px; }
+  label { display: block; font-size: 13px; color: var(--soluk); margin: 0 0 6px; }
+  .alan { margin-bottom: 16px; }
+  input {
+    width: 100%; padding: 13px 14px; font-size: 17px; color: var(--yazi);
+    background: var(--kart); border: 1px solid var(--cizgi); border-radius: 12px;
+  }
+  input:focus { outline: 2px solid var(--vurgu); outline-offset: -1px; }
+  button { font: inherit; cursor: pointer; border: 0; }
+  .btn {
+    width: 100%; padding: 15px; border-radius: 12px; font-size: 17px; font-weight: 600;
+    background: var(--vurgu); color: var(--vurgu-yazi);
+  }
+  .btn[disabled] { opacity: .45; }
+  .btn-ikincil { background: var(--kart); color: var(--yazi); border: 1px solid var(--cizgi); }
+  .cipler { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .cip {
+    padding: 9px 15px; border-radius: 999px; background: var(--kart);
+    border: 1px solid var(--cizgi); color: var(--yazi); font-size: 15px;
+  }
+  .cip.secili { background: var(--vurgu); color: var(--vurgu-yazi); border-color: transparent; }
+  #kamera { display: none; margin-bottom: 16px; }
+  #kamera.acik { display: block; }
+  .video-kutu {
+    position: relative; border-radius: 14px; overflow: hidden; background: #000;
+    aspect-ratio: 4 / 3;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nisan {
+    position: absolute; left: 8%; right: 8%; top: 32%; height: 36%;
+    border: 3px solid rgba(255,255,255,.9); border-radius: 10px;
+    box-shadow: 0 0 0 2000px rgba(0,0,0,.35);
+  }
+  .durum { font-size: 14px; color: var(--soluk); margin-top: 8px; text-align: center; }
+  .uyari {
+    background: color-mix(in srgb, #e24b4a 12%, transparent); color: #a32d2d;
+    padding: 11px 13px; border-radius: 10px; font-size: 14px; margin-bottom: 14px;
+  }
+  .gecmis { margin-top: 26px; border-top: 1px solid var(--cizgi); padding-top: 14px; }
+  .gecmis h2 { font-size: 14px; color: var(--soluk); font-weight: 500; margin: 0 0 10px; }
+  .kayit { font-size: 14px; padding: 9px 0; border-bottom: 1px solid var(--cizgi); }
+  .kayit b { font-variant-numeric: tabular-nums; }
+  .gizli { display: none; }
+</style>
+</head>
+<body>
+<h1>SKT girişi</h1>
+
+<div id="uyari" class="uyari gizli"></div>
+
+<button id="tara" class="btn btn-ikincil" style="margin-bottom:16px">📷 Barkodu kameraya okut</button>
+
+<div id="kamera">
+  <div class="video-kutu">
+    <video id="video" playsinline muted></video>
+    <div class="nisan"></div>
+  </div>
+  <div class="durum" id="kameraDurum">Barkodu çerçevenin içine al</div>
+  <button id="kameraKapat" class="btn btn-ikincil" style="margin-top:10px">Kamerayı kapat</button>
+</div>
+
+<div class="alan">
+  <label for="kod">Ürün kodu / barkod</label>
+  <input id="kod" inputmode="numeric" autocomplete="off" placeholder="0101565">
+</div>
+
+<div class="alan">
+  <label for="skt">Son kullanma tarihi</label>
+  <input id="skt" type="date">
+</div>
+
+<div class="alan">
+  <label for="adet">Adet</label>
+  <input id="adet" type="number" min="1" step="1" value="1" inputmode="numeric">
+  <div class="cipler" id="adetCipleri"></div>
+</div>
+
+<button id="gonder" class="btn">Kaydet</button>
+
+<div class="gecmis gizli" id="gecmis">
+  <h2>Bu oturumda gönderilenler</h2>
+  <div id="gecmisListe"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script>
+const tg = window.Telegram ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
+
+const $ = (id) => document.getElementById(id);
+const uyariKutu = $("uyari");
+function uyar(metin) {
+  uyariKutu.textContent = metin;
+  uyariKutu.classList.toggle("gizli", !metin);
+}
+function titret(tur) {
+  try { tg && tg.HapticFeedback.notificationOccurred(tur); } catch (e) {}
+}
+
+/* --- adet cipleri --- */
+[1, 2, 3, 4, 5, 6, 8, 10, 12, 24].forEach((s) => {
+  const b = document.createElement("button");
+  b.className = "cip";
+  b.textContent = s;
+  b.onclick = () => { $("adet").value = s; isaretle(s); };
+  $("adetCipleri").appendChild(b);
+});
+function isaretle(deger) {
+  [...document.querySelectorAll(".cip")].forEach((c) =>
+    c.classList.toggle("secili", Number(c.textContent) === Number(deger)));
+}
+$("adet").addEventListener("input", () => isaretle($("adet").value));
+isaretle(1);
+
+/* --- kamera ile barkod okuma --- */
+let akis = null, zxingOkuyucu = null, tarama = null;
+
+async function kamerayiAc() {
+  uyar("");
+  $("kamera").classList.add("acik");
+  $("tara").classList.add("gizli");
+  try {
+    akis = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }
+    });
+  } catch (e) {
+    kamerayiKapat();
+    uyar("Kamera açılamadı. Telegram'a kamera izni ver ya da kodu elle yaz.");
+    return;
+  }
+  const video = $("video");
+  video.srcObject = akis;
+  await video.play();
+
+  if ("BarcodeDetector" in window) {
+    const dedektor = new BarcodeDetector({
+      formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code", "itf"]
+    });
+    $("kameraDurum").textContent = "Barkodu çerçevenin içine al";
+    tarama = setInterval(async () => {
+      try {
+        const bulunan = await dedektor.detect(video);
+        if (bulunan.length) okundu(bulunan[0].rawValue);
+      } catch (e) {}
+    }, 250);
+  } else if (window.ZXing) {
+    $("kameraDurum").textContent = "Okunuyor…";
+    zxingOkuyucu = new ZXing.BrowserMultiFormatReader();
+    zxingOkuyucu.decodeFromVideoElement(video, (sonuc) => {
+      if (sonuc) okundu(sonuc.getText());
+    });
+  } else {
+    kamerayiKapat();
+    uyar("Bu cihazda kamerayla okuma desteklenmiyor, kodu elle yaz.");
+  }
+}
+
+function kamerayiKapat() {
+  if (tarama) { clearInterval(tarama); tarama = null; }
+  if (zxingOkuyucu) { try { zxingOkuyucu.reset(); } catch (e) {} zxingOkuyucu = null; }
+  if (akis) { akis.getTracks().forEach((t) => t.stop()); akis = null; }
+  $("video").srcObject = null;
+  $("kamera").classList.remove("acik");
+  $("tara").classList.remove("gizli");
+}
+
+/* Raf etiketi QR'i "urun kodu - fiyat" tasir: 1713865-10,00 */
+function kodAyikla(ham) {
+  const e = String(ham).trim().match(/^(\d{4,14})\s*[-_/]\s*\d{1,6}[.,]\d{2}$/);
+  return e ? e[1] : String(ham).trim();
+}
+
+function okundu(ham) {
+  const kod = kodAyikla(ham);
+  $("kod").value = kod;
+  $("kameraDurum").textContent = "Okundu: " + kod;
+  titret("success");
+  kamerayiKapat();
+  if (!$("skt").value) $("skt").focus();
+}
+
+$("tara").onclick = kamerayiAc;
+$("kameraKapat").onclick = kamerayiKapat;
+
+/* --- gonderme --- */
+$("gonder").onclick = () => {
+  const kod = $("kod").value.trim();
+  const skt = $("skt").value;
+  const adet = parseInt($("adet").value, 10);
+
+  if (!kod) { uyar("Ürün kodu boş. Kameraya okut ya da elle yaz."); return; }
+  if (!skt) { uyar("Son kullanma tarihini seç."); return; }
+  if (!adet || adet < 1) { uyar("Adet en az 1 olmalı."); return; }
+  uyar("");
+
+  const veri = JSON.stringify({ islem: "kayit", kod: kod, skt: skt, adet: adet });
+  gecmiseEkle(kod, skt, adet);
+  titret("success");
+
+  if (tg && tg.sendData) {
+    tg.sendData(veri);          // Telegram pencereyi kapatip veriyi bota gonderir
+  } else {
+    uyar("Bu sayfa Telegram içinden açılmadığı için gönderilemedi. Gönderilecek veri: " + veri);
+  }
+};
+
+function gecmiseEkle(kod, skt, adet) {
+  const kutu = $("gecmisListe");
+  const satir = document.createElement("div");
+  const gun = skt.split("-").reverse().join(".");
+  satir.className = "kayit";
+  satir.innerHTML = "<b>" + kod + "</b> · SKT " + gun + " · " + adet + " ad";
+  kutu.prepend(satir);
+  $("gecmis").classList.remove("gizli");
+}
+</script>
+</body>
+</html>
