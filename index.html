@@ -205,7 +205,18 @@ function okundu(ham) {
 $("tara").onclick = kamerayiAc;
 $("kameraKapat").onclick = kamerayiKapat;
 
-/* --- gonderme --- */
+/* --- gonderme ---
+   Telegram, uygulamadan bota dogrudan veri gondermeye (sendData) yalnizca
+   klavye butonundan acilan uygulamalarda izin veriyor. Tarayicidan ya da mesaj
+   icindeki butondan acilinca t.me baglantisiyla gonderiyoruz; ikisi de bota
+   ayni kaydi ulastirir. */
+const BOT = "SKT67bot";
+
+function b64url(metin) {
+  return btoa(unescape(encodeURIComponent(metin)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 $("gonder").onclick = () => {
   const kod = $("kod").value.trim();
   const skt = $("skt").value;
@@ -216,23 +227,34 @@ $("gonder").onclick = () => {
   if (!adet || adet < 1) { uyar("Adet en az 1 olmalı."); return; }
   uyar("");
 
-  const veri = JSON.stringify({ islem: "kayit", kod: kod, skt: skt, adet: adet });
-  gecmiseEkle(kod, skt, adet);
+  const derin = "https://t.me/" + BOT + "?start=" + b64url(kod + "|" + skt + "|" + adet);
+  gecmiseEkle(kod, skt, adet, derin);
   titret("success");
 
   if (tg && tg.sendData) {
-    tg.sendData(veri);          // Telegram pencereyi kapatip veriyi bota gonderir
-  } else {
-    uyar("Bu sayfa Telegram içinden açılmadığı için gönderilemedi. Gönderilecek veri: " + veri);
+    try { tg.sendData(JSON.stringify({ islem: "kayit", kod: kod, skt: skt, adet: adet })); }
+    catch (e) {}
   }
+
+  // sendData calistiysa Telegram pencereyi hemen kapatir; hala buradaysak yedek yol
+  setTimeout(() => {
+    if (document.visibilityState !== "visible") return;
+    if (tg && tg.openTelegramLink) tg.openTelegramLink(derin);
+    else window.location.href = derin;
+  }, 800);
+
+  $("kod").value = "";           // sonraki urun icin hazir (tarih ayni kalir)
+  $("adet").value = 1;
+  isaretle(1);
 };
 
-function gecmiseEkle(kod, skt, adet) {
+function gecmiseEkle(kod, skt, adet, derin) {
   const kutu = $("gecmisListe");
   const satir = document.createElement("div");
   const gun = skt.split("-").reverse().join(".");
   satir.className = "kayit";
-  satir.innerHTML = "<b>" + kod + "</b> · SKT " + gun + " · " + adet + " ad";
+  satir.innerHTML = "<b>" + kod + "</b> · SKT " + gun + " · " + adet + " ad" +
+    ' <a href="' + derin + '" style="color:var(--vurgu)">Telegram\'a gönder</a>';
   kutu.prepend(satir);
   $("gecmis").classList.remove("gizli");
 }
