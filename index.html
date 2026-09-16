@@ -21,9 +21,9 @@
     font: 16px/1.45 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
     background: var(--zemin); color: var(--yazi);
   }
-  .sekmeler { display: flex; gap: 6px; margin-bottom: 16px; }
+  .sekmeler { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
   .sekme {
-    flex: 1; padding: 11px 4px; border-radius: 10px; font-size: 13px; font-weight: 600;
+    flex: 1 1 30%; padding: 11px 4px; border-radius: 10px; font-size: 13px; font-weight: 600;
     background: var(--kart); color: var(--soluk); border: 1px solid var(--cizgi);
     text-align: center; cursor: pointer;
   }
@@ -72,6 +72,7 @@
   <div class="sekme" data-sekme="sayim">Sayım</div>
   <div class="sekme" data-sekme="urun_ekle">Ürün ekle</div>
   <div class="sekme secili" data-sekme="skt_ekle">SKT ekle</div>
+  <div class="sekme" data-sekme="fire">Kaldırma</div>
   <div class="sekme" data-sekme="skt_sil">SKT sil</div>
 </div>
 
@@ -128,12 +129,15 @@ const $ = (id) => document.getElementById(id);
 
 /* --- sekmeler --- */
 const SEKMELER = {
-  sayim:     { buton: "Sayımı gönder",    skt: false, adet: true,  adetEtiket: "Rafta sayılan adet",
-               not: "Rafta gerçekte kaç adet varsa onu yaz; bot kaydı buna eşitler." },
+  sayim:     { buton: "Sayımı gönder",    skt: true,  adet: true,  adetEtiket: "Rafta sayılan adet",
+               not: "Kayıttan az sayarsan aradaki fark satıldı olarak düşer. " +
+                    "Tarihi boş bırakırsan bot hangi kayıt diye sorar." },
   urun_ekle: { buton: "Ürünü tanımla",    skt: false, adet: false,
                not: "Ürün adını ve SKT'den kaç gün önce kalkacağını bot sohbette soracak." },
   skt_ekle:  { buton: "Kaydet",           skt: true,  adet: true,  adetEtiket: "Adet",
-               not: "" },
+               sktZorunlu: true, not: "" },
+  fire:      { buton: "Fire olarak düş",  skt: true,  adet: true,  adetEtiket: "Kaldırılan adet",
+               not: "Bu adet fire (çekildi) olarak kaydedilir, satış sayılmaz." },
   skt_sil:   { buton: "Kayıtları getir",  skt: false, adet: false,
                not: "Bu ürünün kayıtları sohbete gelir, silmek istediğinin butonuna basarsın." },
 };
@@ -147,6 +151,10 @@ function sekmeSec(ad) {
   $("alanSkt").classList.toggle("gizli", !s.skt);
   $("alanAdet").classList.toggle("gizli", !s.adet);
   if (s.adet) $("adetEtiket").textContent = s.adetEtiket;
+  // "0" secenegi yalnizca sayimda anlamli ("rafta hic kalmamis")
+  const sifir = document.querySelector('.cip[data-deger="0"]');
+  if (sifir) sifir.classList.toggle("gizli", ad !== "sayim");
+  $("adet").min = ad === "sayim" ? 0 : 1;
   $("gonder").textContent = s.buton;
   $("sekmeNotu").textContent = s.not;
   $("sekmeNotu").classList.toggle("gizli", !s.not);
@@ -163,9 +171,10 @@ function uyar(metin) {
 function titret(tur) { try { tg && tg.HapticFeedback.notificationOccurred(tur); } catch (e) {} }
 
 /* --- adet cipleri --- */
-[1, 2, 3, 4, 5, 6, 8, 10, 12, 24].forEach((s) => {
+[0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 24].forEach((s) => {
   const b = document.createElement("button");
   b.className = "cip";
+  b.dataset.deger = s;
   b.textContent = s;
   b.onclick = () => { $("adet").value = s; isaretle(s); };
   $("adetCipleri").appendChild(b);
@@ -256,11 +265,10 @@ function b64url(metin) {
 }
 
 function paketle(islem, kod, skt, adet, fiyat) {
-  const harf = { skt_ekle: "e", sayim: "s", urun_ekle: "u", skt_sil: "d" }[islem];
-  const alanlar = islem === "skt_ekle" ? [skt, adet]
-                : islem === "sayim" ? [adet, ""]
-                : ["", ""];
-  return harf + "|" + kod + "|" + alanlar[0] + "|" + alanlar[1] + "|" + (fiyat || "");
+  const harf = { skt_ekle: "e", sayim: "s", fire: "f", urun_ekle: "u", skt_sil: "d" }[islem];
+  const s = SEKMELER[islem];
+  return harf + "|" + kod + "|" + (s.skt ? skt : "") + "|" +
+         (s.adet ? adet : "") + "|" + (fiyat || "");
 }
 
 $("gonder").onclick = () => {
@@ -271,8 +279,13 @@ $("gonder").onclick = () => {
   const adet = parseInt($("adet").value, 10);
 
   if (!kod) { uyar("Ürün kodu boş. Kameraya okut ya da elle yaz."); return; }
-  if (s.skt && !skt) { uyar("Son kullanma tarihini seç."); return; }
-  if (s.adet && (!adet || adet < 1)) { uyar("Adet en az 1 olmalı."); return; }
+  if (s.sktZorunlu && !skt) { uyar("Son kullanma tarihini seç."); return; }
+  // sayimda 0 gecerli: "rafta hic kalmamis" demek
+  const enAz = aktifSekme === "sayim" ? 0 : 1;
+  if (s.adet && (Number.isNaN(adet) || adet < enAz)) {
+    uyar(enAz === 0 ? "Adet 0 ya da daha fazla olmalı." : "Adet en az 1 olmalı.");
+    return;
+  }
   uyar("");
 
   const derin = "https://t.me/" + BOT + "?start=" +
