@@ -78,7 +78,12 @@
 
 <div id="uyari" class="uyari gizli"></div>
 
-<button id="tara" class="btn btn-ikincil" style="margin-bottom:14px">📷 Barkodu kameraya okut</button>
+<div id="taraButonlari" style="display:flex; gap:8px; margin-bottom:14px">
+  <button id="tara" class="btn btn-ikincil" style="flex:1">📷 Kamerayla okut</button>
+  <button id="fotoButon" class="btn btn-ikincil" style="flex:1">🖼 Fotoğrafla okut</button>
+</div>
+<input type="file" id="fotoSec" accept="image/*" capture="environment" hidden>
+<div class="durum gizli" id="fotoDurum" style="margin:-6px 0 12px"></div>
 
 <div id="kamera">
   <div class="video-kutu">
@@ -187,52 +192,162 @@ $("adet").addEventListener("input", () => isaretle($("adet").value));
 isaretle(1);
 sekmeSec("skt_ekle");
 
-/* --- kamera --- */
-let akis = null, zxingOkuyucu = null, tarama = null;
+/* --- barkod okuma ---
+   Android'de tarayicinin yerlesik BarcodeDetector'u var. iPhone'da (WebKit) yok;
+   orada ZXing'in cekirdek okuyucusuyla kareleri kendimiz cozuyoruz. ZXing'in
+   hazir video yardimcilarini kullanmiyoruz: "oynatilabilir" olayini bekledikleri
+   icin video zaten oynuyorsa hic taramaya baslamiyorlardi.
+   Adrese ?zxing=1 eklenirse Android/bilgisayarda da iPhone yolu denenir. */
+const ZORLA_ZXING = new URLSearchParams(location.search).has("zxing");
+let yerelDedektor = null, zxingOkuyucu = null;
+
+function okuyucuHazirla() {
+  if (yerelDedektor || zxingOkuyucu) return true;
+  if (!ZORLA_ZXING && "BarcodeDetector" in window) {
+    yerelDedektor = new BarcodeDetector({
+      formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code", "itf"]
+    });
+    return true;
+  }
+  if (window.ZXing && ZXing.MultiFormatReader) {
+    const B = ZXing.BarcodeFormat;
+    const ipuclari = new Map();
+    ipuclari.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,
+      [B.QR_CODE, B.EAN_13, B.EAN_8, B.UPC_A, B.UPC_E, B.CODE_128, B.CODE_39, B.ITF]);
+    ipuclari.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zxingOkuyucu = new ZXing.MultiFormatReader();
+    zxingOkuyucu.setHints(ipuclari);
+    return true;
+  }
+  return false;
+}
+
+const tuval = document.createElement("canvas");
+const tuvalKalem = tuval.getContext("2d", { willReadFrequently: true });
+
+/* kaynagin bir bolgesini tuvale cizer; olcek > 1 kucuk kalan kodu buyutur */
+function bolgeyiCiz(kaynak, [x, y, w, h], olcek) {
+  const hedefGen = Math.max(1, Math.min(1600, Math.round(w * olcek)));
+  tuval.width = hedefGen;
+  tuval.height = Math.max(1, Math.round(h * hedefGen / w));
+  tuvalKalem.drawImage(kaynak, x, y, w, h, 0, 0, tuval.width, tuval.height);
+}
+
+async function tuvaliCoz() {
+  if (yerelDedektor) {
+    try {
+      const bulunan = await yerelDedektor.detect(tuval);
+      return bulunan.length ? bulunan[0].rawValue : null;
+    } catch (e) { return null; }
+  }
+  try {
+    const isik = new ZXing.HTMLCanvasElementLuminanceSource(tuval);
+    return zxingOkuyucu.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(isik))).getText();
+  } catch (e) {
+    return null;                       // bu karede kod yok
+  } finally {
+    zxingOkuyucu.reset();
+  }
+}
+
+/* bir goruntuyu sirayla dener: tum kare, nisangah bolgesi, uzaktaki kucuk kod */
+async function kaynagiCoz(kaynak, gen, yuk) {
+  const denemeler = [
+    [[0, 0, gen, yuk], 1],
+    [[gen * 0.08, yuk * 0.25, gen * 0.84, yuk * 0.5], 2],
+    [[gen * 0.2, yuk * 0.3, gen * 0.6, yuk * 0.4], 2.5],
+  ];
+  for (const [bolge, olcek] of denemeler) {
+    bolgeyiCiz(kaynak, bolge, olcek);
+    const sonuc = await tuvaliCoz();
+    if (sonuc) return sonuc;
+  }
+  return null;
+}
+
+/* --- canli kamera --- */
+let akis = null, tarama = null, cozuluyor = false;
 
 async function kamerayiAc() {
   uyar("");
+  if (!okuyucuHazirla()) {
+    uyar("Bu cihazda okuma desteklenmiyor. Kodu elle yaz.");
+    return;
+  }
   $("kamera").classList.add("acik");
-  $("tara").classList.add("gizli");
+  $("taraButonlari").classList.add("gizli");
   try {
     akis = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } }
+      audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
   } catch (e) {
     kamerayiKapat();
-    uyar("Kamera açılamadı. İzin ver ya da kodu elle yaz.");
+    uyar("Kamera açılamadı. İzin ver ya da 'Fotoğrafla okut'u kullan.");
     return;
   }
   const video = $("video");
+  video.muted = true;
+  video.setAttribute("playsinline", "");
   video.srcObject = akis;
-  await video.play();
+  try { await video.play(); } catch (e) {}
 
-  if ("BarcodeDetector" in window) {
-    const dedektor = new BarcodeDetector({
-      formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code", "itf"]
-    });
-    tarama = setInterval(async () => {
-      try {
-        const bulunan = await dedektor.detect(video);
-        if (bulunan.length) okundu(bulunan[0].rawValue);
-      } catch (e) {}
-    }, 250);
-  } else if (window.ZXing) {
-    zxingOkuyucu = new ZXing.BrowserMultiFormatReader();
-    zxingOkuyucu.decodeFromVideoElement(video, (sonuc) => { if (sonuc) okundu(sonuc.getText()); });
-  } else {
-    kamerayiKapat();
-    uyar("Bu cihazda kamerayla okuma desteklenmiyor, kodu elle yaz.");
-  }
+  // destekleyen cihazlarda surekli odaklama iste (iPhone bunu kendisi yonetir)
+  try {
+    const iz = akis.getVideoTracks()[0];
+    const yetenek = iz.getCapabilities ? iz.getCapabilities() : {};
+    if (yetenek.focusMode && yetenek.focusMode.includes("continuous")) {
+      await iz.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+    }
+  } catch (e) {}
+
+  $("kameraDurum").textContent = "Kodu çerçeveye al · telefonu 20-30 cm uzakta tut";
+  tarama = setInterval(async () => {
+    if (cozuluyor || !video.videoWidth) return;
+    cozuluyor = true;
+    try {
+      const sonuc = await kaynagiCoz(video, video.videoWidth, video.videoHeight);
+      if (sonuc) okundu(sonuc);
+    } finally {
+      cozuluyor = false;
+    }
+  }, 250);
 }
 
 function kamerayiKapat() {
   if (tarama) { clearInterval(tarama); tarama = null; }
-  if (zxingOkuyucu) { try { zxingOkuyucu.reset(); } catch (e) {} zxingOkuyucu = null; }
   if (akis) { akis.getTracks().forEach((t) => t.stop()); akis = null; }
   $("video").srcObject = null;
   $("kamera").classList.remove("acik");
-  $("tara").classList.remove("gizli");
+  $("taraButonlari").classList.remove("gizli");
+}
+
+/* --- fotograftan okuma: telefonun kendi kamerasi netlemeyi daha iyi yapar --- */
+function resmiYukle(dosya) {
+  return new Promise((coz, reddet) => {
+    const adres = URL.createObjectURL(dosya);
+    const resim = new Image();
+    resim.onload = () => { coz(resim); setTimeout(() => URL.revokeObjectURL(adres), 2000); };
+    resim.onerror = reddet;
+    resim.src = adres;
+  });
+}
+
+async function fotografiOku(dosya) {
+  uyar("");
+  if (!okuyucuHazirla()) { uyar("Bu cihazda okuma desteklenmiyor. Kodu elle yaz."); return; }
+  $("fotoDurum").textContent = "Fotoğraf okunuyor…";
+  $("fotoDurum").classList.remove("gizli");
+  try {
+    const resim = await resmiYukle(dosya);
+    const sonuc = await kaynagiCoz(resim, resim.naturalWidth, resim.naturalHeight);
+    if (sonuc) okundu(sonuc);
+    else uyar("Fotoğrafta kod bulunamadı. Kodu ortaya alıp biraz uzaktan, net çek.");
+  } catch (e) {
+    uyar("Fotoğraf açılamadı.");
+  } finally {
+    $("fotoDurum").classList.add("gizli");
+  }
 }
 
 /* Raf etiketi QR'i "urun kodu - fiyat" tasir: 1713865-10,00 */
@@ -255,6 +370,12 @@ function okundu(ham) {
 
 $("tara").onclick = kamerayiAc;
 $("kameraKapat").onclick = kamerayiKapat;
+$("fotoButon").onclick = () => $("fotoSec").click();
+$("fotoSec").addEventListener("change", (olay) => {
+  const dosya = olay.target.files && olay.target.files[0];
+  olay.target.value = "";                // ayni fotograf tekrar secilebilsin
+  if (dosya) fotografiOku(dosya);
+});
 
 /* --- gonderme ---
    Telegram sendData'ya yalnizca klavye butonundan acilan uygulamada izin verir.
