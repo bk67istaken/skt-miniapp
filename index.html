@@ -69,9 +69,10 @@
 <body>
 
 <div class="sekmeler">
+  <div class="sekme secili" data-sekme="kart">Ürün kartı</div>
   <div class="sekme" data-sekme="sayim">Sayım</div>
   <div class="sekme" data-sekme="urun_ekle">Ürün ekle</div>
-  <div class="sekme secili" data-sekme="skt_ekle">SKT ekle</div>
+  <div class="sekme" data-sekme="skt_ekle">SKT ekle</div>
   <div class="sekme" data-sekme="fire">Kaldırma</div>
   <div class="sekme" data-sekme="skt_sil">SKT sil</div>
 </div>
@@ -134,6 +135,9 @@ const $ = (id) => document.getElementById(id);
 
 /* --- sekmeler --- */
 const SEKMELER = {
+  kart:      { buton: "Ürün kartını getir", skt: false, adet: false,
+               not: "Okuttuğun ürünün adı, fiyatı ve kayıtlı SKT'leri sohbete gelir. " +
+                    "Adet değiştirme ve yeni SKT ekleme oradaki butonlarla yapılır." },
   sayim:     { buton: "Sayımı gönder",    skt: true,  adet: true,  adetEtiket: "Rafta sayılan adet",
                not: "Kayıttan az sayarsan aradaki fark satıldı olarak düşer. " +
                     "Tarihi boş bırakırsan bot hangi kayıt diye sorar." },
@@ -190,7 +194,7 @@ function isaretle(deger) {
 }
 $("adet").addEventListener("input", () => isaretle($("adet").value));
 isaretle(1);
-sekmeSec("skt_ekle");
+sekmeSec("kart");
 
 /* --- barkod okuma ---
    Android'de tarayicinin yerlesik BarcodeDetector'u var. iPhone'da (WebKit) yok;
@@ -366,6 +370,8 @@ function okundu(ham) {
   }
   titret("success");
   kamerayiKapat();
+  // urun kartinda ayrica tusa basmaya gerek yok
+  if (aktifSekme === "kart") setTimeout(gonderimYap, 400);
 }
 
 $("tara").onclick = kamerayiAc;
@@ -386,13 +392,14 @@ function b64url(metin) {
 }
 
 function paketle(islem, kod, skt, adet, fiyat) {
-  const harf = { skt_ekle: "e", sayim: "s", fire: "f", urun_ekle: "u", skt_sil: "d" }[islem];
+  const harf = { kart: "k", skt_ekle: "e", sayim: "s", fire: "f",
+                 urun_ekle: "u", skt_sil: "d" }[islem];
   const s = SEKMELER[islem];
   return harf + "|" + kod + "|" + (s.skt ? skt : "") + "|" +
          (s.adet ? adet : "") + "|" + (fiyat || "");
 }
 
-$("gonder").onclick = () => {
+function gonderimYap() {
   const s = SEKMELER[aktifSekme];
   const kod = $("kod").value.trim();
   const fiyat = $("fiyat").value.trim();
@@ -433,7 +440,9 @@ $("gonder").onclick = () => {
   $("fiyatBilgi").classList.add("gizli");
   $("adet").value = 1;
   isaretle(1);
-};
+}
+
+$("gonder").onclick = gonderimYap;
 
 function gecmiseEkle(kod, derin) {
   const kutu = $("gecmisListe");
